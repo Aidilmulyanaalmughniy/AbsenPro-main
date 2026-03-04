@@ -9,11 +9,11 @@
     }
   ],
   "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client", "react", "react-dom"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
-    },
-    "jsx": "react-jsx",
-    "types": ["vite/client", "react", "react-dom"]
+      "@/*": ["src/*"]
+    }
   }
 }
