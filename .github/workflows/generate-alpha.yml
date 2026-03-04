@@ -1,22 +1,22 @@
 name: Generate Alpha
 
 on:
-workflow_dispatch:
-schedule:
-- cron: '10 8 * * *'
+  workflow_dispatch:
+  schedule:
+    - cron: "10 8 * * *"
 
 jobs:
-generate:
-runs-on: ubuntu-latest
+  generate:
+    runs-on: ubuntu-latest
 
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  - name: Install firebase-admin
-    run: npm install firebase-admin
+      - name: Install firebase-admin
+        run: npm install firebase-admin
 
-  - name: Run alpha generator
-    run: node scripts/generateAlpha.js
-    env:
-      FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+      - name: Run alpha generator
+        run: node scripts/generateAlpha.js
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
