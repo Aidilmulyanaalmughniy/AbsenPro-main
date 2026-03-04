@@ -1,8 +1,12 @@
-import { useMemo } from 'react'
-import { UserX, Users, CheckCircle2, XCircle } from 'lucide-react'
-import type { Siswa } from '@/types'
-import { motion, AnimatePresence } from 'framer-motion'
-import { cn } from '@/lib/utils'
+import { useMemo } from "react"
+import { UserX, Users, CheckCircle2, XCircle } from "lucide-react"
+import type { Siswa } from "@/types"
+import { motion, AnimatePresence } from "framer-motion"
+import { cn } from "@/lib/utils"
+
+import { setDoc, doc, serverTimestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+import { useApp } from "@/context/AppContext"
 
 interface BelumAbsenListProps {
   siswa: Siswa[]
@@ -22,6 +26,13 @@ export function BelumAbsenList({
   loading = false
 }: BelumAbsenListProps) {
 
+  const { userRole } = useApp()
+
+  const canInput =
+    userRole === "admin" ||
+    userRole === "developer" ||
+    userRole === "owner"
+
   const progress =
     totalSiswa > 0
       ? Math.round((hadirCount / totalSiswa) * 100)
@@ -34,7 +45,45 @@ export function BelumAbsenList({
   }, [siswa])
 
   // ==========================
-  // DYNAMIC MESSAGE SYSTEM
+  // INPUT MANUAL ABSENSI
+  // ==========================
+
+  async function setManualAttendance(siswa: Siswa, status: string) {
+
+    const now = new Date()
+
+    const today = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    )
+
+    const tanggalKey = today
+      .toISOString()
+      .split("T")[0]
+      .replace(/-/g, "")
+
+    const id = `${siswa.uid_rfid}_${tanggalKey}`
+
+    const ref = doc(db, "absensi", id)
+
+    await setDoc(ref, {
+      uid_rfid: siswa.uid_rfid,
+      nama: siswa.nama,
+      kelas: siswa.kelas,
+
+      status: status,
+      terlambatMenit: null,
+
+      tanggal: today,
+      waktu_scan: now,
+
+      createdAt: serverTimestamp()
+    })
+  }
+
+  // ==========================
+  // MESSAGE SYSTEM
   // ==========================
 
   const message = useMemo(() => {
@@ -71,22 +120,6 @@ export function BelumAbsenList({
       }
     }
 
-    if (hadirCount > tidakHadirCount) {
-      return {
-        title: "Mayoritas siswa hadir",
-        desc: `${hadirCount} hadir, ${tidakHadirCount} tidak hadir.`,
-        icon: <CheckCircle2 className="mx-auto text-emerald-400 mb-4" size={40} />
-      }
-    }
-
-    if (tidakHadirCount > hadirCount) {
-      return {
-        title: "Mayoritas siswa tidak hadir",
-        desc: `${tidakHadirCount} tidak hadir, ${hadirCount} hadir.`,
-        icon: <XCircle className="mx-auto text-red-400 mb-4" size={40} />
-      }
-    }
-
     return {
       title: "Data kehadiran hari ini",
       desc: `${hadirCount} hadir dan ${tidakHadirCount} tidak hadir.`,
@@ -106,7 +139,7 @@ export function BelumAbsenList({
   return (
     <div className="rounded-2xl bg-gradient-to-br from-[#1e293b] to-[#0f172a] border border-white/10 shadow-xl overflow-hidden">
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
 
       <div className="p-6 border-b border-white/10 space-y-6">
 
@@ -125,7 +158,7 @@ export function BelumAbsenList({
           </div>
         </div>
 
-        {/* MINI STATS */}
+        {/* STATS */}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 
@@ -152,7 +185,7 @@ export function BelumAbsenList({
 
         </div>
 
-        {/* PROGRESS BAR */}
+        {/* PROGRESS */}
 
         <div>
           <div className="flex justify-between text-xs text-white/50 mb-1">
@@ -161,18 +194,20 @@ export function BelumAbsenList({
           </div>
 
           <div className="h-2 bg-black/40 rounded-full overflow-hidden">
+
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.6 }}
               className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500"
             />
+
           </div>
         </div>
 
       </div>
 
-      {/* ================= CONTENT ================= */}
+      {/* CONTENT */}
 
       <div className="p-6">
 
@@ -193,7 +228,9 @@ export function BelumAbsenList({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
             <AnimatePresence>
+
               {sortedSiswa.map((item, i) => (
+
                 <motion.div
                   key={item.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -201,7 +238,9 @@ export function BelumAbsenList({
                   transition={{ delay: i * 0.03 }}
                   className="p-4 rounded-xl border border-red-500/20 bg-red-500/5"
                 >
+
                   <div className="flex items-center gap-3">
+
                     <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold text-white">
                       {item.nama.charAt(0).toUpperCase()}
                     </div>
@@ -214,16 +253,50 @@ export function BelumAbsenList({
                         {item.kelas}
                       </p>
                     </div>
+
                   </div>
 
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-3">
+
                     <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-400">
                       Belum Scan
                     </span>
+
+                    {canInput && (
+
+                      <div className="grid grid-cols-3 gap-2">
+
+                        <button
+                          onClick={() => setManualAttendance(item, "izin")}
+                          className="text-xs py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 transition"
+                        >
+                          Izin
+                        </button>
+
+                        <button
+                          onClick={() => setManualAttendance(item, "sakit")}
+                          className="text-xs py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition"
+                        >
+                          Sakit
+                        </button>
+
+                        <button
+                          onClick={() => setManualAttendance(item, "alpha")}
+                          className="text-xs py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition"
+                        >
+                          Alpha
+                        </button>
+
+                      </div>
+
+                    )}
+
                   </div>
 
                 </motion.div>
+
               ))}
+
             </AnimatePresence>
 
           </div>
@@ -237,12 +310,15 @@ export function BelumAbsenList({
 }
 
 function Stat({ label, value, icon, green, red }: any) {
+
   return (
     <div className="bg-black/30 rounded-xl p-4 border border-white/10">
+
       <div className="text-white/50 text-xs flex items-center gap-2">
         {icon}
         {label}
       </div>
+
       <div className={cn(
         "text-lg font-semibold mt-1",
         green && "text-emerald-400",
@@ -251,6 +327,7 @@ function Stat({ label, value, icon, green, red }: any) {
       )}>
         {value}
       </div>
+
     </div>
   )
 }

@@ -25,14 +25,20 @@ today.toISOString().split("T")[0].replace(/-/g,"")
 
 console.log("Start generate alpha")
 
+// ======================
 // ambil semua siswa
+// ======================
+
 const siswaSnap = await db.collection("siswa").get()
 
+// ======================
 // ambil absensi hari ini
+// ======================
+
 const absensiSnap = await db
 .collection("absensi")
-.where("tanggal", ">=", today)
-.where("tanggal", "<=", endToday)
+.where("tanggal", ">=", admin.firestore.Timestamp.fromDate(today))
+.where("tanggal", "<=", admin.firestore.Timestamp.fromDate(endToday))
 .get()
 
 const scanned = new Set()
@@ -47,40 +53,45 @@ let counter = 0
 
 for (const doc of siswaSnap.docs){
 
-
 const siswa = doc.data()
 
 if(!scanned.has(siswa.uid_rfid)){
 
-  const id = `${siswa.uid_rfid}_${tanggalKey}`
+// ID unik per hari
+const id = `${siswa.uid_rfid}_${tanggalKey}`
 
-  const ref = db.collection("absensi").doc(id)
+const ref = db.collection("absensi").doc(id)
 
-  batch.set(ref,{
-    uid_rfid: siswa.uid_rfid,
-    nama: siswa.nama,
-    kelas: siswa.kelas,
+batch.set(ref,{
 
-    status: "alpha",
-    terlambatMenit: null,
+uid_rfid: siswa.uid_rfid,
+nama: siswa.nama,
+kelas: siswa.kelas,
 
-    tanggal: today,
-    waktu_scan: now,
+status: "alpha",
+terlambatMenit: null,
 
-    createdAt: admin.firestore.FieldValue.serverTimestamp()
-  })
+tanggal: admin.firestore.Timestamp.fromDate(today),
+waktu_scan: admin.firestore.Timestamp.fromDate(now),
 
-  counter++
+createdAt: admin.firestore.FieldValue.serverTimestamp()
 
-  // Firestore max batch 500
-  if(counter === 450){
-    await batch.commit()
-    batch = db.batch()
-    counter = 0
-  }
+})
+
+counter++
+
+// Firestore limit 500
+if(counter === 450){
+
+await batch.commit()
+
+batch = db.batch()
+
+counter = 0
 
 }
 
+}
 
 }
 

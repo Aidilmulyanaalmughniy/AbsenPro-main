@@ -1,157 +1,221 @@
 import { useEffect, useState } from 'react'
+
 import type { StatData, ChartData } from '@/types'
+
 import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  Timestamp
+collection,
+onSnapshot,
+query,
+where,
+Timestamp
 } from 'firebase/firestore'
+
 import { db } from '@/lib/firebase'
-import { startOfDay, endOfDay, subDays, format } from 'date-fns'
+
+import {
+startOfDay,
+endOfDay,
+subDays,
+format,
+isSameDay
+} from 'date-fns'
 
 interface UseStatsReturn {
-  stats: StatData
-  chartData: ChartData
-  loading: boolean
-  error: string | null
+stats: StatData
+chartData: ChartData
+loading: boolean
+error: string | null
 }
 
 export function useStats(
-  selectedDate: Date = new Date(),
-  selectedKelas: string = 'all'
+selectedDate: Date = new Date(),
+selectedKelas: string = 'all'
 ): UseStatsReturn {
 
-  const [stats, setStats] = useState<StatData>({
-    totalSiswa: 0,
-    hadirHariIni: 0,
-    belumAbsen: 0,
-    persentaseKehadiran: 0
-  })
+const [stats,setStats] = useState<StatData>({
+totalSiswa:0,
+hadirHariIni:0,
+belumAbsen:0,
+persentaseKehadiran:0
+})
 
-  const [chartData, setChartData] = useState<ChartData>({
-    labels: [],
-    data: []
-  })
+const [chartData,setChartData] = useState<ChartData>({
+labels:[],
+data:[]
+})
 
-  const [loading, setLoading] = useState(true)
+const [loading,setLoading] = useState(true)
 
-  useEffect(() => {
-    setLoading(true)
+useEffect(()=>{
 
-    const startToday = startOfDay(selectedDate)
-    const endToday = endOfDay(selectedDate)
+setLoading(true)
 
-    // =========================
-    // LISTEN SISWA
-    // =========================
-    const unsubSiswa = onSnapshot(
-      collection(db, 'siswa'),
-      siswaSnap => {
+const startToday = startOfDay(selectedDate)
+const endToday = endOfDay(selectedDate)
 
-        let siswaList = siswaSnap.docs.map(d => d.data())
+/* ===============================
+LISTEN DATA SISWA
+=============================== */
 
-        if (selectedKelas !== 'all') {
-          siswaList = siswaList.filter(
-            s => s.kelas === selectedKelas
-          )
-        }
+const unsubSiswa = onSnapshot(
+collection(db,'siswa'),
+siswaSnap=>{
 
-        const totalSiswa = siswaList.length
+let siswaList = siswaSnap.docs.map(d=>d.data())
 
-        // =========================
-        // LISTEN ABSENSI HARI INI
-        // =========================
-        const absensiQuery = query(
-          collection(db, 'absensi'),
-          where('tanggal', '>=', Timestamp.fromDate(startToday)),
-          where('tanggal', '<=', Timestamp.fromDate(endToday))
-        )
+if(selectedKelas !== 'all'){
+siswaList = siswaList.filter(
+s => s.kelas === selectedKelas
+)
+}
 
-        const unsubAbsensi = onSnapshot(absensiQuery, absSnap => {
+const totalSiswa = siswaList.length
 
-          let absensiData = absSnap.docs.map(d => d.data())
+/* ===============================
+LISTEN ABSENSI HARI INI
+=============================== */
 
-          if (selectedKelas !== 'all') {
-            absensiData = absensiData.filter(
-              a => a.kelas === selectedKelas
-            )
-          }
+const absensiQuery = query(
+collection(db,'absensi'),
+where('tanggal','>=',Timestamp.fromDate(startToday)),
+where('tanggal','<=',Timestamp.fromDate(endToday))
+)
 
-          const hadirHariIni = absensiData.filter(
-            a => a.status === 'hadir'
-          ).length
+const unsubAbsensi = onSnapshot(absensiQuery,absSnap=>{
 
-          const belumAbsen = Math.max(0, totalSiswa - hadirHariIni)
+let absensiData = absSnap.docs.map(d=>d.data())
 
-          const persentase =
-            totalSiswa > 0
-              ? Math.round((hadirHariIni / totalSiswa) * 100)
-              : 0
+if(selectedKelas !== 'all'){
+absensiData = absensiData.filter(
+a => a.kelas === selectedKelas
+)
+}
 
-          setStats({
-            totalSiswa,
-            hadirHariIni,
-            belumAbsen,
-            persentaseKehadiran: persentase
-          })
+/* ===============================
+HADIR
+=============================== */
 
-          setLoading(false)
-        })
+const hadirHariIni =
+absensiData.filter(
+a => a.status === 'hadir'
+).length
 
-        return () => unsubAbsensi()
-      }
-    )
+/* ===============================
+UID YANG SUDAH ABSEN
+=============================== */
 
-    // =========================
-    // GRAFIK 7 HARI TERAKHIR
-    // =========================
-    const sevenDaysAgo = subDays(selectedDate, 6)
+const scannedUID = new Set(
+absensiData.map(a => a.uid_rfid)
+)
 
-    const weeklyQuery = query(
-      collection(db, 'absensi'),
-      where('tanggal', '>=', Timestamp.fromDate(startOfDay(sevenDaysAgo))),
-      where('tanggal', '<=', Timestamp.fromDate(endToday))
-    )
+/* ===============================
+BELUM ABSEN
+=============================== */
 
-    const unsubWeekly = onSnapshot(weeklyQuery, snapshot => {
+const belumAbsen =
+siswaList.filter(
+s => !scannedUID.has(s.uid_rfid)
+).length
 
-      const raw = snapshot.docs.map(d => d.data())
+/* ===============================
+PERSENTASE
+=============================== */
 
-      const labels: string[] = []
-      const values: number[] = []
+const persentase =
+totalSiswa > 0
+? Math.round((hadirHariIni / totalSiswa) * 100)
+: 0
 
-      for (let i = 6; i >= 0; i--) {
-        const date = subDays(selectedDate, i)
-        labels.push(format(date, 'dd/MM'))
+setStats({
+totalSiswa,
+hadirHariIni,
+belumAbsen,
+persentaseKehadiran: persentase
+})
 
-        const count = raw.filter(a => {
-          const tgl = a.tanggal?.toDate?.()
-          if (!tgl) return false
+setLoading(false)
 
-          return (
-            format(tgl, 'yyyy-MM-dd') ===
-              format(date, 'yyyy-MM-dd') &&
-            a.status === 'hadir'
-          )
-        }).length
+})
 
-        values.push(count)
-      }
+return ()=>unsubAbsensi()
 
-      setChartData({ labels, data: values })
-    })
+})
 
-    return () => {
-      unsubSiswa()
-      unsubWeekly()
-    }
-  }, [selectedDate, selectedKelas])
+/* ===============================
+GRAFIK 7 HARI TERAKHIR
+=============================== */
 
-  return {
-    stats,
-    chartData,
-    loading,
-    error: null
-  }
+const sevenDaysAgo = subDays(selectedDate,6)
+
+const weeklyQuery = query(
+collection(db,'absensi'),
+where(
+'tanggal',
+'>=',
+Timestamp.fromDate(startOfDay(sevenDaysAgo))
+),
+where(
+'tanggal',
+'<=',
+Timestamp.fromDate(endToday)
+)
+)
+
+const unsubWeekly = onSnapshot(weeklyQuery,snapshot=>{
+
+let raw = snapshot.docs.map(d=>d.data())
+
+if(selectedKelas !== 'all'){
+raw = raw.filter(
+a => a.kelas === selectedKelas
+)
+}
+
+const labels:string[] = []
+const values:number[] = []
+
+for(let i=6;i>=0;i--){
+
+const date = subDays(selectedDate,i)
+
+labels.push(format(date,'dd/MM'))
+
+const hadirCount = raw.filter(a=>{
+
+const tgl = a.tanggal?.toDate?.()
+
+if(!tgl) return false
+
+return (
+isSameDay(tgl,date) &&
+a.status === 'hadir'
+)
+
+}).length
+
+values.push(hadirCount)
+
+}
+
+setChartData({
+labels,
+data:values
+})
+
+})
+
+return ()=>{
+unsubSiswa()
+unsubWeekly()
+}
+
+},[selectedDate,selectedKelas])
+
+return {
+stats,
+chartData,
+loading,
+error:null
+}
+
 }

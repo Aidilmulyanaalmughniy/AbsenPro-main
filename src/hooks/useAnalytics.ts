@@ -1,175 +1,216 @@
 import { useEffect, useState } from "react"
 import {
-  collection,
-  query,
-  where,
-  getDocs
+collection,
+query,
+where,
+getDocs
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import {
-  startOfDay,
-  endOfDay,
-  subDays,
-  format,
-  isSameDay
+startOfDay,
+endOfDay,
+subDays,
+format,
+isSameDay
 } from "date-fns"
 
 interface Analytics {
-  average7Days: number
-  weeklyTrend: number
-  riskCount: number
-  bestDay: string
-  worstDay: string
-  insight: string
+average7Days: number
+weeklyTrend: number
+riskCount: number
+bestDay: string
+worstDay: string
+insight: string
 }
 
 export function useAnalytics(
-  selectedDate: Date,
-  selectedKelas: string
+selectedDate: Date,
+selectedKelas: string
 ) {
-  const [analytics, setAnalytics] =
-    useState<Analytics>({
-      average7Days: 0,
-      weeklyTrend: 0,
-      riskCount: 0,
-      bestDay: "-",
-      worstDay: "-",
-      insight: ""
-    })
 
-  const [chartData, setChartData] = useState({
-    labels: [] as string[],
-    data: [] as number[]
-  })
+const [analytics,setAnalytics] =
+useState<Analytics>({
+average7Days:0,
+weeklyTrend:0,
+riskCount:0,
+bestDay:"-",
+worstDay:"-",
+insight:""
+})
 
-  const [loading, setLoading] = useState(true)
+const [chartData,setChartData] = useState({
+labels:[] as string[],
+data:[] as number[]
+})
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      setLoading(true)
+const [loading,setLoading] = useState(true)
 
-      try {
-        const start7 = startOfDay(subDays(selectedDate, 6))
-        const end7 = endOfDay(selectedDate)
+useEffect(()=>{
 
-        // 🔥 1 QUERY UNTUK 7 HARI
-        const q = query(
-          collection(db, "absensi"),
-          where("kelas", "==", selectedKelas),
-          where("tanggal", ">=", start7),
-          where("tanggal", "<=", end7)
-        )
+const fetchAnalytics = async ()=>{
 
-        const snap = await getDocs(q)
+setLoading(true)
 
-        const rawData: any[] = []
+try{
 
-        snap.forEach(doc => {
-          rawData.push(doc.data())
-        })
+const start7 = startOfDay(subDays(selectedDate,6))
+const end7 = endOfDay(selectedDate)
 
-        const labels: string[] = []
-        const data: number[] = []
+/* ===========================
+QUERY ABSENSI
+=========================== */
 
-        const studentAlpha: Record<string, number> = {}
+let q
 
-        // 🔹 Loop 7 Hari (olah di client)
-        for (let i = 6; i >= 0; i--) {
-          const date = subDays(selectedDate, i)
+if(selectedKelas === "Semua"){
 
-          const daily = rawData.filter(d =>
-            isSameDay(
-              d.tanggal.toDate(),
-              date
-            )
-          )
+q = query(
+collection(db,"absensi"),
+where("tanggal",">=",start7),
+where("tanggal","<=",end7)
+)
 
-          let hadir = 0
-          let total = daily.length
+}else{
 
-          daily.forEach(d => {
-            if (d.status === "Hadir")
-              hadir++
+q = query(
+collection(db,"absensi"),
+where("kelas","==",selectedKelas),
+where("tanggal",">=",start7),
+where("tanggal","<=",end7)
+)
 
-            if (d.status === "Alpha") {
-              if (!studentAlpha[d.nama])
-                studentAlpha[d.nama] = 0
+}
 
-              studentAlpha[d.nama]++
-            }
-          })
+const snap = await getDocs(q)
 
-          const persen =
-            total > 0
-              ? Math.round((hadir / total) * 100)
-              : 0
+const rawData:any[] = []
 
-          labels.push(format(date, "EEE"))
-          data.push(persen)
-        }
+snap.forEach(doc=>{
+rawData.push(doc.data())
+})
 
-        // 🔹 Analytics
-        const average7Days =
-          data.reduce((a, b) => a + b, 0) /
-          data.length
+/* ===========================
+ANALYTICS PROCESS
+=========================== */
 
-        const weeklyTrend =
-          data[data.length - 1] -
-          data[0]
+const labels:string[] = []
+const data:number[] = []
 
-        const max = Math.max(...data)
-        const min = Math.min(...data)
+const studentAlpha:Record<string,number> = {}
 
-        const bestDay =
-          labels[data.indexOf(max)]
+for(let i=6;i>=0;i--){
 
-        const worstDay =
-          labels[data.indexOf(min)]
+const date = subDays(selectedDate,i)
 
-        const riskCount =
-          Object.values(studentAlpha)
-            .filter(v => v >= 2).length
+const daily = rawData.filter(d =>
+isSameDay(d.tanggal.toDate(),date)
+)
 
-        // 🔥 SMARTER INSIGHT
-        let insight = ""
+let hadir = 0
+let total = daily.length
 
-        if (average7Days >= 95)
-          insight =
-            "Kehadiran sangat optimal. Sistem berjalan sangat baik."
-        else if (average7Days >= 85)
-          insight =
-            "Performa kehadiran stabil dan cukup tinggi."
-        else if (average7Days >= 70)
-          insight =
-            "Kehadiran cukup namun perlu monitoring kelas tertentu."
-        else
-          insight =
-            "Kehadiran rendah. Perlu evaluasi dan tindak lanjut segera."
+daily.forEach(d=>{
 
-        setAnalytics({
-          average7Days:
-            Math.round(average7Days),
-          weeklyTrend,
-          riskCount,
-          bestDay,
-          worstDay,
-          insight
-        })
+if(d.status === "hadir")
+hadir++
 
-        setChartData({ labels, data })
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
-    }
+if(d.status === "alpha"){
 
-    fetchAnalytics()
-  }, [selectedDate, selectedKelas])
+if(!studentAlpha[d.nama])
+studentAlpha[d.nama]=0
 
-  return {
-    analytics,
-    chartData,
-    loading
-  }
+studentAlpha[d.nama]++
+
+}
+
+})
+
+const persen =
+total>0
+? Math.round((hadir/total)*100)
+: 0
+
+labels.push(format(date,"EEE"))
+data.push(persen)
+
+}
+
+/* ===========================
+SUMMARY
+=========================== */
+
+const average7Days =
+data.reduce((a,b)=>a+b,0)/data.length
+
+const weeklyTrend =
+data[data.length-1]-data[0]
+
+const max = Math.max(...data)
+const min = Math.min(...data)
+
+const bestDay =
+labels[data.indexOf(max)]
+
+const worstDay =
+labels[data.indexOf(min)]
+
+const riskCount =
+Object.values(studentAlpha)
+.filter(v=>v>=2).length
+
+/* ===========================
+SMART INSIGHT
+=========================== */
+
+let insight = ""
+
+if(average7Days >= 95)
+insight =
+"Kehadiran sangat optimal. Sistem berjalan sangat baik."
+
+else if(average7Days >= 85)
+insight =
+"Performa kehadiran stabil dan cukup tinggi."
+
+else if(average7Days >= 70)
+insight =
+"Kehadiran cukup namun perlu monitoring."
+
+else
+insight =
+"Kehadiran rendah. Perlu evaluasi segera."
+
+setAnalytics({
+average7Days:Math.round(average7Days),
+weeklyTrend,
+riskCount,
+bestDay,
+worstDay,
+insight
+})
+
+setChartData({labels,data})
+
+}catch(err){
+
+console.error(err)
+
+}finally{
+
+setLoading(false)
+
+}
+
+}
+
+fetchAnalytics()
+
+},[selectedDate,selectedKelas])
+
+return {
+analytics,
+chartData,
+loading
+}
+
 }
