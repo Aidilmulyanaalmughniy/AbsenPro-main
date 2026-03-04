@@ -64,7 +64,7 @@ const ref = db.collection("absensi").doc(id)
 
 batch.set(ref,{
 
-uid_rfid: siswa.uid_rfid,
+uid_rfid: String(siswa.uid_rfid),
 nama: siswa.nama,
 kelas: siswa.kelas,
 
