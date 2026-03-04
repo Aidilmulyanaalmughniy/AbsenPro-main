@@ -58,7 +58,9 @@ export interface Absensi {
   nama: string
   kelas: string
   tanggal: Date | Timestamp
+  waktu_scan?: Date | Timestamp
   status: StatusAbsensi
+  terlambatMenit?: number | null
   createdAt: Date | Timestamp
   updatedAt?: Date | Timestamp
   updatedBy?: string

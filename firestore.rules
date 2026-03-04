@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================
+    // SAFE ROLE CHECK
+    // ===============================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getRole() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isOwner() {
+      return getRole() == "owner";
+    }
+
+    function isDeveloper() {
+      return getRole() == "developer";
+    }
+
+    function isAdmin() {
+      return getRole() == "admin";
+    }
+
+    // ===============================
+    // USERS
+    // ===============================
+
+    match /users/{doc} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
+    // ===============================
+    // SISWA
+    // ===============================
+
+    match /siswa/{doc} {
+      allow read: if true;
+      allow write: if isOwner() || isDeveloper();
+    }
+
+    // ===============================
+    // ABSENSI
+    // ===============================
+
+    match /absensi/{doc} {
+      allow read: if true;
+      allow write: if isOwner() || isDeveloper() || isAdmin();
+    }
+
+    // ===============================
+    // ACTIVITY LOG
+    // ===============================
+
+    match /activity_logs/{doc} {
+      allow read: if isOwner();
+      allow write: if isAuthenticated();
+    }
+
+    // ===============================
+    // KELAS
+    // ===============================
+
+    match /kelas/{doc} {
+      allow read: if true;
+      allow write: if isOwner() || isDeveloper();
+    }
+
+    // ===============================
+    // SETTINGS (MAINTENANCE)
+    // ===============================
+
+    match /settings/{doc} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+  }
+}

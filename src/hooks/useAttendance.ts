@@ -5,252 +5,205 @@ import { startOfDay, endOfDay, format } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { canAccess } from '@/lib/permissions'
 import { logActivity } from '@/lib/activityLogger'
+
 import {
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  updateDoc,
-  onSnapshot,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-  Timestamp
+collection,
+doc,
+setDoc,
+deleteDoc,
+updateDoc,
+onSnapshot,
+query,
+where,
+serverTimestamp,
+Timestamp
 } from 'firebase/firestore'
+
 import { db } from '@/lib/firebase'
 
 interface UseAttendanceReturn {
-  absensi: Absensi[]
-  loading: boolean
-  error: string | null
-  addAbsensi: (data: Omit<Absensi, 'id' | 'createdAt' | 'status'>) => Promise<void>
-  deleteAbsensi: (id: string) => Promise<void>
-  updateStatus: (id: string, status: Absensi['status']) => Promise<void>
-  generateAlpha: () => Promise<void>
+absensi: Absensi[]
+loading: boolean
+error: string | null
+addAbsensi: (data: Omit<Absensi,'id'|'createdAt'|'status'>) => Promise<void>
+deleteAbsensi: (id: string) => Promise<void>
+updateStatus: (id: string,status: Absensi['status']) => Promise<void>
 }
 
 export function useAttendance(
-  selectedDate: Date = new Date(),
-  selectedKelas: string = 'all'
+selectedDate: Date = new Date(),
+selectedKelas: string = 'all'
 ): UseAttendanceReturn {
 
-  const { userRole } = useAuth()
-  const [absensi, setAbsensi] = useState<Absensi[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+const { userRole } = useAuth()
 
-  // ======================================
-  // REALTIME LISTENER
-  // ======================================
+const [absensi,setAbsensi] = useState<Absensi[]>([])
+const [loading,setLoading] = useState(true)
+const [error] = useState<string|null>(null)
 
-  useEffect(() => {
+useEffect(()=>{
 
-    setLoading(true)
+setLoading(true)
 
-    const startDate = startOfDay(selectedDate)
-    const endDate = endOfDay(selectedDate)
+const startDate = startOfDay(selectedDate)
+const endDate = endOfDay(selectedDate)
 
-    const q = query(
-      collection(db, 'absensi'),
-      where('tanggal', '>=', Timestamp.fromDate(startDate)),
-      where('tanggal', '<=', Timestamp.fromDate(endDate))
-    )
+const q = query(
+collection(db,'absensi'),
+where('tanggal','>=',Timestamp.fromDate(startDate)),
+where('tanggal','<=',Timestamp.fromDate(endDate))
+)
 
-    const unsubscribe = onSnapshot(q, snapshot => {
+const unsubscribe = onSnapshot(q,(snapshot)=>{
 
-      let data: Absensi[] = snapshot.docs.map(docSnap => {
-        const raw = docSnap.data()
-        return {
-          id: docSnap.id,
-          ...raw,
-          tanggal: raw.tanggal?.toDate?.() ?? raw.tanggal,
-          createdAt: raw.createdAt?.toDate?.() ?? raw.createdAt,
-          waktu_scan: raw.waktu_scan?.toDate?.() ?? raw.waktu_scan
-        } as unknown as Absensi
-      })
+let data:Absensi[] = snapshot.docs.map(docSnap=>{
 
-      if (selectedKelas !== 'all') {
-        data = data.filter(a => a.kelas === selectedKelas)
-      }
+const raw = docSnap.data()
 
-      setAbsensi(data)
-      setLoading(false)
-    })
+return{
+id:docSnap.id,
+uid_rfid:raw.uid_rfid,
+nama:raw.nama,
+kelas:raw.kelas,
+status:raw.status,
+tanggal:raw.tanggal?.toDate(),
+waktu_scan:raw.waktu_scan?.toDate(),
+terlambatMenit:raw.terlambatMenit ?? null,
+createdAt:raw.createdAt?.toDate()
+} as Absensi
 
-    return () => unsubscribe()
+})
 
-  }, [selectedDate, selectedKelas])
+if(selectedKelas!=='all'){
+data=data.filter(a=>a.kelas===selectedKelas)
+}
 
-  // ======================================
-  // DETERMINE STATUS (ONLY HERE)
-  // ======================================
+setAbsensi(data)
+setLoading(false)
 
-  const determineStatus = () => {
+})
 
-    const now = new Date()
-    const minutes = now.getHours() * 60 + now.getMinutes()
+return ()=>unsubscribe()
 
-    const hadirEnd = 6 * 60 + 35      // 06:35
-    const terlambatEnd = 15 * 60 + 10 // 15:10
+},[selectedDate,selectedKelas])
 
-    if (minutes < hadirEnd) return 'hadir'
-    if (minutes >= hadirEnd && minutes <= terlambatEnd) return 'terlambat'
+const addAbsensi = useCallback(async(
+data:Omit<Absensi,'id'|'createdAt'|'status'>
+)=>{
 
-    return 'alpha'
-  }
+if(!canAccess(userRole,'admin')){
+toast.error('Tidak memiliki izin')
+return
+}
 
-  // ======================================
-  // ADD ABSENSI (SCAN RFID)
-  // ======================================
+try{
 
-  const addAbsensi = useCallback(async (
-    data: Omit<Absensi, 'id' | 'createdAt' | 'status'>
-  ) => {
+const now=new Date()
+const today=startOfDay(now)
 
-    if (!canAccess(userRole, 'admin')) {
-      toast.error('Tidak memiliki izin')
-      return
-    }
+const jamMasuk=new Date()
+jamMasuk.setHours(6,35,0,0)
 
-    try {
+const batasAlpha=new Date()
+batasAlpha.setHours(15,10,0,0)
 
-      const now = new Date()
-      const today = startOfDay(now)
-      const status = determineStatus()
+if(now>batasAlpha){
+toast.error('Sudah lewat batas absensi (15:10)')
+return
+}
 
-      const id = `${data.uid_rfid}_${format(today, 'yyyyMMdd')}`
+let status:Absensi['status']='hadir'
+let terlambatMenit:number|null=null
 
-      await setDoc(doc(db, 'absensi', id), {
-        ...data,
-        status,
-        waktu_scan: Timestamp.fromDate(now),
-        tanggal: Timestamp.fromDate(today),
-        createdAt: serverTimestamp()
-      }, { merge: true })
+if(now>jamMasuk){
 
-      await logActivity('ADD_ABSENSI', id)
-      toast.success('Absensi berhasil disimpan')
+const diff=now.getTime()-jamMasuk.getTime()
 
-    } catch {
-      toast.error('Gagal menyimpan absensi')
-    }
+terlambatMenit=Math.floor(diff/60000)
 
-  }, [userRole])
+status='terlambat'
 
-  // ======================================
-  // UPDATE STATUS (IZIN / SAKIT)
-  // ======================================
+}
 
-  const updateStatus = useCallback(async (
-    id: string,
-    status: Absensi['status']
-  ) => {
+const id=`${data.uid_rfid}_${format(today,'yyyyMMdd')}`
 
-    try {
-      await updateDoc(doc(db, 'absensi', id), { status })
-      await logActivity('UPDATE_STATUS', id)
-      toast.success('Status diperbarui')
-    } catch {
-      toast.error('Gagal update status')
-    }
+await setDoc(doc(db,'absensi',id),{
 
-  }, [])
+...data,
 
-  // ======================================
-  // DELETE
-  // ======================================
+status,
+terlambatMenit,
 
-  const deleteAbsensi = useCallback(async (id: string) => {
+waktu_scan:Timestamp.fromDate(now),
+tanggal:Timestamp.fromDate(today),
 
-    if (!canAccess(userRole, 'developer')) {
-      toast.error('Tidak memiliki izin')
-      return
-    }
+createdAt:serverTimestamp()
 
-    try {
-      await deleteDoc(doc(db, 'absensi', id))
-      await logActivity('DELETE_ABSENSI', id)
-      toast.success('Absensi dihapus')
-    } catch {
-      toast.error('Gagal menghapus')
-    }
+},{merge:true})
 
-  }, [userRole])
+await logActivity('ADD_ABSENSI',id)
 
-  // ======================================
-  // AUTO GENERATE ALPHA AFTER 15:10
-  // ======================================
+toast.success('Absensi berhasil disimpan')
 
-  const generateAlpha = useCallback(async () => {
+}catch{
 
-    const now = new Date()
-    const minutes = now.getHours() * 60 + now.getMinutes()
-    const terlambatEnd = 15 * 60 + 10
+toast.error('Gagal menyimpan absensi')
 
-    if (minutes < terlambatEnd) return
+}
 
-    try {
+},[userRole])
 
-      const siswaSnap = await getDocs(collection(db, 'siswa'))
-      const today = startOfDay(now)
+const updateStatus = useCallback(async(
+id:string,
+status:Absensi['status']
+)=>{
 
-      const absensiSnap = await getDocs(
-        query(
-          collection(db, 'absensi'),
-          where('tanggal', '>=', Timestamp.fromDate(today)),
-          where('tanggal', '<=', Timestamp.fromDate(endOfDay(today)))
-        )
-      )
+try{
 
-      const existingIds = absensiSnap.docs.map(d => d.id)
+await updateDoc(doc(db,'absensi',id),{status})
 
-      for (const siswaDoc of siswaSnap.docs) {
+await logActivity('UPDATE_STATUS',id)
 
-        const siswaData = siswaDoc.data()
-        const id = `${siswaData.uid_rfid}_${format(today, 'yyyyMMdd')}`
+toast.success('Status diperbarui')
 
-        if (!existingIds.includes(id)) {
+}catch{
 
-          await setDoc(doc(db, 'absensi', id), {
-            uid_rfid: siswaData.uid_rfid,
-            nama: siswaData.nama,
-            kelas: siswaData.kelas,
-            status: 'alpha',
-            tanggal: Timestamp.fromDate(today),
-            createdAt: serverTimestamp()
-          })
+toast.error('Gagal update status')
 
-        }
-      }
+}
 
-      await logActivity('GENERATE_ALPHA')
+},[])
 
-    } catch {
-      console.log('Alpha generation skipped')
-    }
+const deleteAbsensi = useCallback(async(id:string)=>{
 
-  }, [])
+if(!canAccess(userRole,'developer')){
+toast.error('Tidak memiliki izin')
+return
+}
 
-  // ======================================
-  // AUTO CHECK EVERY MINUTE
-  // ======================================
+try{
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      generateAlpha()
-    }, 60000)
+await deleteDoc(doc(db,'absensi',id))
 
-    return () => clearInterval(interval)
-  }, [generateAlpha])
+await logActivity('DELETE_ABSENSI',id)
 
-  return {
-    absensi,
-    loading,
-    error,
-    addAbsensi,
-    deleteAbsensi,
-    updateStatus,
-    generateAlpha
-  }
+toast.success('Absensi dihapus')
+
+}catch{
+
+toast.error('Gagal menghapus')
+
+}
+
+},[userRole])
+
+return{
+absensi,
+loading,
+error,
+addAbsensi,
+deleteAbsensi,
+updateStatus
+}
+
 }

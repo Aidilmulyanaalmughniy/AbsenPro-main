@@ -36,24 +36,26 @@ export function BelumAbsen() {
       absensi.map(a => a.uid_rfid)
     )
 
-    const belumScan = siswa.filter(
+    const rawBelumScan = siswa.filter(
       s => !scannedRFIDs.has(s.uid_rfid)
     )
 
-    const belumAbsenCount =
-      now < batas ? belumScan.length : 0
+    // 🔥 Setelah 15:10 tidak boleh ada "Belum Scan"
+    const belumScan =
+      now < batas ? rawBelumScan : []
 
-    const tidakHadirTambahan =
-      now >= batas ? belumScan.length : 0
+    const belumCount = belumScan.length
 
     const tidakHadirCount =
-      tidakHadirDariDB + tidakHadirTambahan
+      now >= batas
+        ? tidakHadirDariDB + rawBelumScan.length
+        : tidakHadirDariDB
 
     return {
       totalSiswa: siswa.length,
       hadirCount,
       tidakHadirCount,
-      belumCount: belumAbsenCount,
+      belumCount,
       belumScan,
     }
   }, [siswa, absensi])
