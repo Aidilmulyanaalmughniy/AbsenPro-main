@@ -1,0 +1,21 @@
+ name: Generate Alpha
+
+on:
+  schedule:
+    - cron: '10 8 * * *'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      - name: Run script
+        run: node scripts/generateAlpha.js
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
