@@ -17,6 +17,6 @@ jobs:
         run: npm install firebase-admin  
   
       - name: Run alpha generator  
-        run: node scripts/generateAlpha.js  
+        run: node scripts/generateAlpha.cjs  
         env:  
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
