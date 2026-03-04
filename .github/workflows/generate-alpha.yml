@@ -9,7 +9,6 @@ jobs:
 generate:
 runs-on: ubuntu-latest
 
-```
 steps:
   - name: Checkout repository
     uses: actions/checkout@v4
@@ -21,4 +20,3 @@ steps:
     run: node scripts/generateAlpha.js
     env:
       FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
-```
