@@ -1,221 +1,218 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react"
 
-import type { StatData, ChartData } from '@/types'
-
-import {
-collection,
-onSnapshot,
-query,
-where,
-Timestamp
-} from 'firebase/firestore'
-
-import { db } from '@/lib/firebase'
+import type { StatData, ChartData } from "@/types"
 
 import {
-startOfDay,
-endOfDay,
-subDays,
-format,
-isSameDay
-} from 'date-fns'
+  collection,
+  onSnapshot,
+  query,
+  where,
+  Timestamp
+} from "firebase/firestore"
+
+import { db } from "@/lib/firebase"
+
+import {
+  startOfDay,
+  endOfDay,
+  subDays,
+  format,
+  isSameDay
+} from "date-fns"
 
 interface UseStatsReturn {
-stats: StatData
-chartData: ChartData
-loading: boolean
-error: string | null
+  stats: StatData
+  chartData: ChartData
+  loading: boolean
+  error: string | null
 }
 
 export function useStats(
-selectedDate: Date = new Date(),
-selectedKelas: string = 'all'
+  selectedDate: Date = new Date(),
+  selectedKelas: string = "all"
 ): UseStatsReturn {
 
-const [stats,setStats] = useState<StatData>({
-totalSiswa:0,
-hadirHariIni:0,
-belumAbsen:0,
-persentaseKehadiran:0
-})
+  const [stats, setStats] = useState<StatData>({
+    totalSiswa: 0,
+    hadirHariIni: 0,
+    belumAbsen: 0,
+    persentaseKehadiran: 0
+  })
 
-const [chartData,setChartData] = useState<ChartData>({
-labels:[],
-data:[]
-})
+  const [chartData, setChartData] = useState<ChartData>({
+    labels: [],
+    data: []
+  })
 
-const [loading,setLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
 
-useEffect(()=>{
+  useEffect(() => {
 
-setLoading(true)
+    setLoading(true)
 
-const startToday = startOfDay(selectedDate)
-const endToday = endOfDay(selectedDate)
+    const startToday = startOfDay(selectedDate)
+    const endToday = endOfDay(selectedDate)
 
-/* ===============================
-LISTEN DATA SISWA
-=============================== */
+    /* ===============================
+       LISTEN DATA SISWA
+    =============================== */
 
-const unsubSiswa = onSnapshot(
-collection(db,'siswa'),
-siswaSnap=>{
+    const unsubSiswa = onSnapshot(
+      collection(db, "siswa"),
+      siswaSnap => {
 
-let siswaList = siswaSnap.docs.map(d=>d.data())
+        let siswaList: any[] = siswaSnap.docs.map(d => d.data())
 
-if(selectedKelas !== 'all'){
-siswaList = siswaList.filter(
-s => s.kelas === selectedKelas
-)
-}
+        if (selectedKelas !== "all") {
+          siswaList = siswaList.filter(
+            s => s.kelas === selectedKelas
+          )
+        }
 
-const totalSiswa = siswaList.length
+        const totalSiswa = siswaList.length
 
-/* ===============================
-LISTEN ABSENSI HARI INI
-=============================== */
+        /* ===============================
+           LISTEN ABSENSI HARI INI
+        =============================== */
 
-const absensiQuery = query(
-collection(db,'absensi'),
-where('tanggal','>=',Timestamp.fromDate(startToday)),
-where('tanggal','<=',Timestamp.fromDate(endToday))
-)
+        const absensiQuery = query(
+          collection(db, "absensi"),
+          where("tanggal", ">=", Timestamp.fromDate(startToday)),
+          where("tanggal", "<=", Timestamp.fromDate(endToday))
+        )
 
-const unsubAbsensi = onSnapshot(absensiQuery,absSnap=>{
+        const unsubAbsensi = onSnapshot(absensiQuery, absSnap => {
 
-let absensiData = absSnap.docs.map(d=>d.data())
+          let absensiData: any[] = absSnap.docs.map(d => d.data())
 
-if(selectedKelas !== 'all'){
-absensiData = absensiData.filter(
-a => a.kelas === selectedKelas
-)
-}
+          if (selectedKelas !== "all") {
+            absensiData = absensiData.filter(
+              a => a.kelas === selectedKelas
+            )
+          }
 
-/* ===============================
-HADIR
-=============================== */
+          /* ===============================
+             HADIR
+          =============================== */
 
-const hadirHariIni =
-absensiData.filter(
-a => a.status === 'hadir'
-).length
+          const hadirHariIni = absensiData.filter(
+            a => a.status === "hadir"
+          ).length
 
-/* ===============================
-UID YANG SUDAH ABSEN
-=============================== */
+          /* ===============================
+             UID YANG SUDAH ABSEN
+          =============================== */
 
-const scannedUID = new Set(
-absensiData.map(a => a.uid_rfid)
-)
+          const scannedUID = new Set(
+            absensiData.map(a => a.uid_rfid)
+          )
 
-/* ===============================
-BELUM ABSEN
-=============================== */
+          /* ===============================
+             BELUM ABSEN
+          =============================== */
 
-const belumAbsen =
-siswaList.filter(
-s => !scannedUID.has(s.uid_rfid)
-).length
+          const belumAbsen = siswaList.filter(
+            s => !scannedUID.has(s.uid_rfid)
+          ).length
 
-/* ===============================
-PERSENTASE
-=============================== */
+          /* ===============================
+             PERSENTASE
+          =============================== */
 
-const persentase =
-totalSiswa > 0
-? Math.round((hadirHariIni / totalSiswa) * 100)
-: 0
+          const persentase =
+            totalSiswa > 0
+              ? Math.round((hadirHariIni / totalSiswa) * 100)
+              : 0
 
-setStats({
-totalSiswa,
-hadirHariIni,
-belumAbsen,
-persentaseKehadiran: persentase
-})
+          setStats({
+            totalSiswa,
+            hadirHariIni,
+            belumAbsen,
+            persentaseKehadiran: persentase
+          })
 
-setLoading(false)
+          setLoading(false)
 
-})
+        })
 
-return ()=>unsubAbsensi()
+        return () => unsubAbsensi()
+      }
+    )
 
-})
+    /* ===============================
+       GRAFIK 7 HARI TERAKHIR
+    =============================== */
 
-/* ===============================
-GRAFIK 7 HARI TERAKHIR
-=============================== */
+    const sevenDaysAgo = subDays(selectedDate, 6)
 
-const sevenDaysAgo = subDays(selectedDate,6)
+    const weeklyQuery = query(
+      collection(db, "absensi"),
+      where(
+        "tanggal",
+        ">=",
+        Timestamp.fromDate(startOfDay(sevenDaysAgo))
+      ),
+      where(
+        "tanggal",
+        "<=",
+        Timestamp.fromDate(endToday)
+      )
+    )
 
-const weeklyQuery = query(
-collection(db,'absensi'),
-where(
-'tanggal',
-'>=',
-Timestamp.fromDate(startOfDay(sevenDaysAgo))
-),
-where(
-'tanggal',
-'<=',
-Timestamp.fromDate(endToday)
-)
-)
+    const unsubWeekly = onSnapshot(weeklyQuery, snapshot => {
 
-const unsubWeekly = onSnapshot(weeklyQuery,snapshot=>{
+      let raw: any[] = snapshot.docs.map(d => d.data())
 
-let raw = snapshot.docs.map(d=>d.data())
+      if (selectedKelas !== "all") {
+        raw = raw.filter(
+          a => a.kelas === selectedKelas
+        )
+      }
 
-if(selectedKelas !== 'all'){
-raw = raw.filter(
-a => a.kelas === selectedKelas
-)
-}
+      const labels: string[] = []
+      const values: number[] = []
 
-const labels:string[] = []
-const values:number[] = []
+      for (let i = 6; i >= 0; i--) {
 
-for(let i=6;i>=0;i--){
+        const date = subDays(selectedDate, i)
 
-const date = subDays(selectedDate,i)
+        labels.push(format(date, "dd/MM"))
 
-labels.push(format(date,'dd/MM'))
+        const hadirCount = raw.filter(a => {
 
-const hadirCount = raw.filter(a=>{
+          const tgl = a.tanggal?.toDate?.()
 
-const tgl = a.tanggal?.toDate?.()
+          if (!tgl) return false
 
-if(!tgl) return false
+          return (
+            isSameDay(tgl, date) &&
+            a.status === "hadir"
+          )
 
-return (
-isSameDay(tgl,date) &&
-a.status === 'hadir'
-)
+        }).length
 
-}).length
+        values.push(hadirCount)
 
-values.push(hadirCount)
+      }
 
-}
+      setChartData({
+        labels,
+        data: values
+      })
 
-setChartData({
-labels,
-data:values
-})
+    })
 
-})
+    return () => {
+      unsubSiswa()
+      unsubWeekly()
+    }
 
-return ()=>{
-unsubSiswa()
-unsubWeekly()
-}
+  }, [selectedDate, selectedKelas])
 
-},[selectedDate,selectedKelas])
-
-return {
-stats,
-chartData,
-loading,
-error:null
-}
-
+  return {
+    stats,
+    chartData,
+    loading,
+    error: null
+  }
 }
