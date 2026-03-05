@@ -53,15 +53,15 @@ export function useStats(
     const startToday = startOfDay(selectedDate)
     const endToday = endOfDay(selectedDate)
 
-    /* ===============================
-       LISTEN DATA SISWA
-    =============================== */
+    /* =========================
+       LISTEN SISWA
+    ========================= */
 
     const unsubSiswa = onSnapshot(
       collection(db, "siswa"),
       siswaSnap => {
 
-        let siswaList: any[] = siswaSnap.docs.map(d => d.data())
+        let siswaList = siswaSnap.docs.map(d => d.data())
 
         if (selectedKelas !== "all") {
           siswaList = siswaList.filter(
@@ -71,9 +71,9 @@ export function useStats(
 
         const totalSiswa = siswaList.length
 
-        /* ===============================
+        /* =========================
            LISTEN ABSENSI HARI INI
-        =============================== */
+        ========================= */
 
         const absensiQuery = query(
           collection(db, "absensi"),
@@ -83,7 +83,7 @@ export function useStats(
 
         const unsubAbsensi = onSnapshot(absensiQuery, absSnap => {
 
-          let absensiData: any[] = absSnap.docs.map(d => d.data())
+          let absensiData = absSnap.docs.map(d => d.data())
 
           if (selectedKelas !== "all") {
             absensiData = absensiData.filter(
@@ -91,33 +91,33 @@ export function useStats(
             )
           }
 
-          /* ===============================
+          /* =========================
              HADIR
-          =============================== */
+          ========================= */
 
           const hadirHariIni = absensiData.filter(
             a => a.status === "hadir"
           ).length
 
-          /* ===============================
+          /* =========================
              UID YANG SUDAH ABSEN
-          =============================== */
+          ========================= */
 
           const scannedUID = new Set(
             absensiData.map(a => a.uid_rfid)
           )
 
-          /* ===============================
+          /* =========================
              BELUM ABSEN
-          =============================== */
+          ========================= */
 
           const belumAbsen = siswaList.filter(
             s => !scannedUID.has(s.uid_rfid)
           ).length
 
-          /* ===============================
+          /* =========================
              PERSENTASE
-          =============================== */
+          ========================= */
 
           const persentase =
             totalSiswa > 0
@@ -136,12 +136,13 @@ export function useStats(
         })
 
         return () => unsubAbsensi()
+
       }
     )
 
-    /* ===============================
+    /* =========================
        GRAFIK 7 HARI TERAKHIR
-    =============================== */
+    ========================= */
 
     const sevenDaysAgo = subDays(selectedDate, 6)
 
@@ -161,7 +162,7 @@ export function useStats(
 
     const unsubWeekly = onSnapshot(weeklyQuery, snapshot => {
 
-      let raw: any[] = snapshot.docs.map(d => d.data())
+      let raw = snapshot.docs.map(d => d.data())
 
       if (selectedKelas !== "all") {
         raw = raw.filter(
@@ -215,4 +216,5 @@ export function useStats(
     loading,
     error: null
   }
+
 }
