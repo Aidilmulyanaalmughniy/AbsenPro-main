@@ -1,341 +1,458 @@
 import { useState } from "react"
-import {
-  Search,
-  Trash2,
-  MoreHorizontal,
-  Pencil
-} from "lucide-react"
+import { Search, Trash2, MoreHorizontal, Pencil } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow
 } from "@/components/ui/table"
 
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
+DropdownMenu,
+DropdownMenuContent,
+DropdownMenuItem,
+DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 
 import { Badge } from "@/components/ui/badge"
 
-import type {
-  Absensi,
-  StatusAbsensi,
-  UserRole
-} from "@/types"
+import type { Absensi, StatusAbsensi, UserRole } from "@/types"
 
 import { format } from "date-fns"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 interface AttendanceTableProps {
-  data: Absensi[]
-  userRole: UserRole
-  onDelete?: (id: string) => void
-  onUpdateStatus?: (id: string, status: StatusAbsensi) => void
-  loading?: boolean
+
+data: Absensi[]
+userRole: UserRole
+onDelete?: (id: string) => void
+onUpdateStatus?: (id: string, status: StatusAbsensi) => void
+loading?: boolean
+
 }
+
+/* ================= BATAS TERLAMBAT ================= */
+
+const BATAS_JAM = 6
+const BATAS_MENIT = 35
+const BATAS_DETIK = 0
+
+/* ================= FIX FIRESTORE DATE ================= */
+
+function getDate(value: any): Date | null {
+
+if (!value) return null
+
+if (value?.toDate) return value.toDate()
+
+if (value instanceof Date) return value
+
+return new Date(value)
+
+}
+
+/* ================= HITUNG TERLAMBAT ================= */
+
+function hitungTerlambat(scanTime?: Date) {
+
+if (!scanTime) return "-"
+
+const batas = new Date(scanTime)
+batas.setHours(BATAS_JAM, BATAS_MENIT, BATAS_DETIK, 0)
+
+const diff = scanTime.getTime() - batas.getTime()
+
+if (diff <= 0) return "-"
+
+const totalDetik = Math.floor(diff / 1000)
+
+const jam = Math.floor(totalDetik / 3600)
+const menit = Math.floor((totalDetik % 3600) / 60)
+const detik = totalDetik % 60
+
+return `${jam}j ${menit}m ${detik}s`
+
+}
+
+/* ================= PARSE KELAS ================= */
+
+function parseKelas(kelas: string) {
+
+const parts = kelas.split(" ")
+
+const tingkatMap: any = {
+x: 1,
+xi: 2,
+xii: 3
+}
+
+const tingkat = tingkatMap[parts[0]?.toLowerCase()] || 99
+
+const jurusan = parts[1] || ""
+
+const nomorMatch = jurusan.match(/\d+/)
+const nomor = nomorMatch ? parseInt(nomorMatch[0]) : 0
+
+const jurusanNama = jurusan.replace(/\d+/, "")
+
+return {
+tingkat,
+jurusanNama,
+nomor
+}
+
+}
+
+/* ================= STATUS CONFIG ================= */
 
 const statusConfig: Record<
-  StatusAbsensi,
-  { label: string; color: string; bg: string }
+StatusAbsensi,
+{ label: string; color: string; bg: string }
 > = {
-  hadir: {
-    label: "Hadir",
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/10 border-emerald-500/20"
-  },
 
-  terlambat: {
-    label: "Terlambat",
-    color: "text-yellow-400",
-    bg: "bg-yellow-500/10 border-yellow-500/20"
-  },
+hadir: {
+label: "Hadir",
+color: "text-emerald-400",
+bg: "bg-emerald-500/10 border-emerald-500/20"
+},
 
-  izin: {
-    label: "Izin",
-    color: "text-blue-400",
-    bg: "bg-blue-500/10 border-blue-500/20"
-  },
+terlambat: {
+label: "Terlambat",
+color: "text-yellow-400",
+bg: "bg-yellow-500/10 border-yellow-500/20"
+},
 
-  sakit: {
-    label: "Sakit",
-    color: "text-purple-400",
-    bg: "bg-purple-500/10 border-purple-500/20"
-  },
+izin: {
+label: "Izin",
+color: "text-blue-400",
+bg: "bg-blue-500/10 border-blue-500/20"
+},
 
-  alpha: {
-    label: "Alpha",
-    color: "text-red-400",
-    bg: "bg-red-500/10 border-red-500/20"
-  }
+sakit: {
+label: "Sakit",
+color: "text-purple-400",
+bg: "bg-purple-500/10 border-purple-500/20"
+},
+
+alpha: {
+label: "Alpha",
+color: "text-red-400",
+bg: "bg-red-500/10 border-red-500/20"
 }
 
+}
+
+/* ================= COMPONENT ================= */
+
 export function AttendanceTable({
-  data,
-  userRole,
-  onDelete,
-  onUpdateStatus,
-  loading = false
+
+data,
+userRole,
+onDelete,
+onUpdateStatus,
+loading = false
+
 }: AttendanceTableProps) {
 
-  const [searchQuery, setSearchQuery] = useState("")
+const [searchQuery, setSearchQuery] = useState("")
 
-  const canEdit =
-    userRole === "developer" ||
-    userRole === "owner"
-
-  const canDelete =
-    userRole === "developer" ||
-    userRole === "owner"
+const canEdit =
+userRole === "developer" ||
+userRole === "owner"
 
-  const filteredData = data.filter(item =>
-    item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.kelas.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+const canDelete =
+userRole === "developer" ||
+userRole === "owner"
 
-  if (loading) {
-    return (
-      <div className="rounded-2xl bg-[#1e293b] border border-white/10 p-6">
-        <div className="h-10 w-64 bg-white/5 rounded-lg animate-pulse" />
-      </div>
-    )
-  }
+/* ================= FILTER + SORT ================= */
 
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="rounded-2xl bg-[#1e293b] border border-white/10 overflow-hidden shadow-xl"
-    >
+const filteredData = data
 
-      {/* HEADER */}
+.filter(item =>
 
-      <div className="p-6 border-b border-white/10 flex justify-between items-center">
-
-        <h3 className="text-lg font-semibold text-white">
-          Data Absensi
-        </h3>
-
-        <div className="relative">
+item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+item.kelas.toLowerCase().includes(searchQuery.toLowerCase())
 
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+)
 
-          <Input
-            placeholder="Cari nama atau kelas..."
-            value={searchQuery}
-            onChange={(e) =>
-              setSearchQuery(e.target.value)
-            }
-            className="pl-10 w-64 bg-[#0f172a] border-white/10 text-white"
-          />
-
-        </div>
-
-      </div>
-
-      {filteredData.length === 0 && (
-        <div className="py-16 text-center text-white/40">
-          Tidak ada data absensi
-        </div>
-      )}
+.sort((a, b) => {
 
-      {filteredData.length > 0 && (
+const A = parseKelas(a.kelas)
+const B = parseKelas(b.kelas)
 
-        <div className="overflow-x-auto">
+if (A.tingkat !== B.tingkat)
+return A.tingkat - B.tingkat
 
-          <Table>
+const jurusanCompare =
+A.jurusanNama.localeCompare(B.jurusanNama)
 
-            <TableHeader>
-              <TableRow className="border-white/10">
-                <TableHead>No</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Kelas</TableHead>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Jam</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Terlambat</TableHead>
-                {(canEdit || canDelete) && (
-                  <TableHead>Aksi</TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
+if (jurusanCompare !== 0)
+return jurusanCompare
 
-            <TableBody>
+if (A.nomor !== B.nomor)
+return A.nomor - B.nomor
 
-              {filteredData.map((item, index) => {
+return a.nama.localeCompare(b.nama)
 
-                /* ===== FIRESTORE TIMESTAMP FIX ===== */
+})
 
-                const rawTanggal =
-                  item.waktu_scan ?? item.tanggal
+if (loading) {
 
-                const tanggalObj: Date =
-                  (rawTanggal as any)?.toDate
-                    ? (rawTanggal as any).toDate()
-                    : rawTanggal
-
-                const status =
-                  statusConfig[item.status]
+return (
 
-                return (
+<div className="rounded-2xl bg-[#1e293b] border border-white/10 p-6">
+<div className="h-10 w-64 bg-white/5 rounded-lg animate-pulse" />
+</div>
 
-                  <TableRow
-                    key={item.id}
-                    className="border-white/10 hover:bg-white/5 transition"
-                  >
+)
 
-                    <TableCell>{index + 1}</TableCell>
+}
 
-                    <TableCell>{item.nama}</TableCell>
+/* ================= UI ================= */
 
-                    <TableCell>{item.kelas}</TableCell>
+return (
 
-                    <TableCell>
-                      {tanggalObj
-                        ? format(tanggalObj, "dd MMM yyyy")
-                        : "-"}
-                    </TableCell>
+<motion.div
 
-                    <TableCell>
-                      {tanggalObj
-                        ? format(tanggalObj, "HH:mm")
-                        : "-"}
-                    </TableCell>
+initial={{ opacity: 0 }}
+animate={{ opacity: 1 }}
 
-                    <TableCell>
+className="rounded-2xl bg-[#1e293b] border border-white/10 overflow-hidden shadow-xl"
 
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "capitalize border",
-                          status.bg,
-                          status.color
-                        )}
-                      >
-                        {status.label}
-                      </Badge>
+>
 
-                    </TableCell>
+{/* HEADER */}
 
-                    <TableCell>
+<div className="p-6 border-b border-white/10 flex justify-between items-center">
 
-                      {item.status === "terlambat" &&
-                      item.terlambatMenit != null ? (
+<h3 className="text-lg font-semibold text-white">
+Data Absensi
+</h3>
 
-                        <span
-                          className={cn(
-                            "font-medium",
-                            item.terlambatMenit > 30
-                              ? "text-red-400"
-                              : "text-yellow-400"
-                          )}
-                        >
-                          {item.terlambatMenit} menit
-                        </span>
+<div className="relative">
 
-                      ) : "-"}
+<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
 
-                    </TableCell>
+<Input
 
-                    {(canEdit || canDelete) && (
+placeholder="Cari nama atau kelas..."
 
-                      <TableCell>
+value={searchQuery}
 
-                        <DropdownMenu>
+onChange={(e) => setSearchQuery(e.target.value)}
 
-                          <DropdownMenuTrigger asChild>
+className="pl-10 w-64 bg-[#0f172a] border-white/10 text-white"
 
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                            >
-                              <MoreHorizontal className="w-4 h-4 text-white/50" />
-                            </Button>
+/>
 
-                          </DropdownMenuTrigger>
+</div>
 
-                          <DropdownMenuContent
-                            align="end"
-                            className="bg-[#1e293b] border-white/10"
-                          >
+</div>
 
-                            {canEdit &&
-                              onUpdateStatus &&
-                              (Object.keys(statusConfig) as StatusAbsensi[]).map(statusKey => (
+{/* TABLE */}
 
-                                <DropdownMenuItem
-                                  key={statusKey}
-                                  onClick={() =>
-                                    onUpdateStatus(
-                                      item.id,
-                                      statusKey
-                                    )
-                                  }
-                                  className="cursor-pointer"
-                                >
+<div className="overflow-x-auto">
 
-                                  <Pencil className="w-4 h-4 mr-2" />
+<Table>
 
-                                  Set {statusConfig[statusKey].label}
+<TableHeader>
 
-                                </DropdownMenuItem>
+<TableRow className="border-white/10">
 
-                              ))}
+<TableHead>No</TableHead>
+<TableHead>Nama</TableHead>
+<TableHead>Kelas</TableHead>
+<TableHead>Tanggal</TableHead>
+<TableHead>Jam</TableHead>
+<TableHead>Status</TableHead>
+<TableHead>Terlambat</TableHead>
 
-                            {canDelete && onDelete && (
+{(canEdit || canDelete) && (
+<TableHead>Aksi</TableHead>
+)}
 
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  if (confirm("Hapus data ini?")) {
-                                    onDelete(item.id)
-                                  }
-                                }}
-                                className="text-red-400 hover:bg-red-500/10 cursor-pointer"
-                              >
+</TableRow>
 
-                                <Trash2 className="w-4 h-4 mr-2" />
+</TableHeader>
 
-                                Hapus
+<TableBody>
 
-                              </DropdownMenuItem>
+{filteredData.map((item, index) => {
 
-                            )}
+const tanggalObj =
+getDate(item.waktu_scan) ||
+getDate(item.tanggal)
 
-                          </DropdownMenuContent>
+const status = statusConfig[item.status]
 
-                        </DropdownMenu>
+const terlambat =
+item.status === "terlambat"
+? hitungTerlambat(tanggalObj ?? undefined)
+: "-"
 
-                      </TableCell>
+return (
 
-                    )}
+<TableRow
+key={item.id}
+className="border-white/10 hover:bg-white/5 transition"
+>
 
-                  </TableRow>
+<TableCell>{index + 1}</TableCell>
 
-                )
-              })}
+<TableCell>{item.nama}</TableCell>
 
-            </TableBody>
+<TableCell>{item.kelas}</TableCell>
 
-          </Table>
+<TableCell>
+{tanggalObj
+? format(tanggalObj, "dd MMM yyyy")
+: "-"}
+</TableCell>
 
-        </div>
+<TableCell>
+{tanggalObj
+? format(tanggalObj, "HH:mm:ss")
+: "-"}
+</TableCell>
 
-      )}
+<TableCell>
 
-      <div className="p-4 border-t border-white/10 text-sm text-white/50">
-        Menampilkan {filteredData.length} data
-      </div>
+<Badge
+variant="outline"
+className={cn(
+"capitalize border",
+status.bg,
+status.color
+)}
+>
 
-    </motion.div>
-  )
+{status.label}
+
+</Badge>
+
+</TableCell>
+
+<TableCell>
+
+<span
+
+className={cn(
+"font-medium",
+item.status === "terlambat"
+? "text-yellow-400"
+: "text-white/40"
+)}
+
+>
+
+{terlambat}
+
+</span>
+
+</TableCell>
+
+{(canEdit || canDelete) && (
+
+<TableCell>
+
+<DropdownMenu>
+
+<DropdownMenuTrigger asChild>
+
+<Button variant="ghost" size="icon">
+
+<MoreHorizontal className="w-4 h-4 text-white/50" />
+
+</Button>
+
+</DropdownMenuTrigger>
+
+<DropdownMenuContent
+align="end"
+className="bg-[#1e293b] border-white/10"
+>
+
+{canEdit &&
+onUpdateStatus &&
+(Object.keys(statusConfig) as StatusAbsensi[]).map(statusKey => (
+
+<DropdownMenuItem
+
+key={statusKey}
+
+onClick={() => onUpdateStatus(item.id, statusKey)}
+
+className="cursor-pointer"
+
+>
+
+<Pencil className="w-4 h-4 mr-2" />
+
+Set {statusConfig[statusKey].label}
+
+</DropdownMenuItem>
+
+))}
+
+{canDelete && onDelete && (
+
+<DropdownMenuItem
+
+onClick={() => {
+
+if (confirm("Hapus data ini?")) {
+onDelete(item.id)
+}
+
+}}
+
+className="text-red-400 hover:bg-red-500/10 cursor-pointer"
+
+>
+
+<Trash2 className="w-4 h-4 mr-2" />
+
+Hapus
+
+</DropdownMenuItem>
+
+)}
+
+</DropdownMenuContent>
+
+</DropdownMenu>
+
+</TableCell>
+
+)}
+
+</TableRow>
+
+)
+
+})}
+
+</TableBody>
+
+</Table>
+
+</div>
+
+<div className="p-4 border-t border-white/10 text-sm text-white/50">
+
+Menampilkan {filteredData.length} data
+
+</div>
+
+</motion.div>
+
+)
+
 }
