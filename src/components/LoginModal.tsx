@@ -230,7 +230,7 @@ export function LoginModal() {
 
               <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/5">
                 <p className="text-xs text-white/40 text-center">
-                  Demo: Gunakan akun yang telah didaftarkan di Firestore
+                  Sign In with your account
                 </p>
               </div>
 
