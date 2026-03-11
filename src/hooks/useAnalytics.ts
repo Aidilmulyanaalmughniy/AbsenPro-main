@@ -17,8 +17,6 @@ format,
 isSameDay
 } from "date-fns"
 
-/* ================= TYPES ================= */
-
 interface StudentRank{
 nama:string
 hadir:number
@@ -45,8 +43,6 @@ topStudents:StudentRank[]
 riskStudents:RiskStudent[]
 latestLate?:LateStudent
 }
-
-/* ================= HOOK ================= */
 
 export function useAnalytics(
 selectedDate:Date,
@@ -80,39 +76,47 @@ setLoading(true)
 
 try{
 
-/* ================= TOTAL SISWA ================= */
+/* NORMALISASI KELAS */
+const kelasFilter =
+selectedKelas === "all"
+? "all"
+: selectedKelas.trim()
+
+/* TOTAL SISWA */
 
 let siswaQuery
 
-if(selectedKelas==="all"){
+if(kelasFilter==="all"){
 siswaQuery = collection(db,"siswa")
-}else{
+}
+else{
 siswaQuery = query(
 collection(db,"siswa"),
-where("kelas","==",selectedKelas)
+where("kelas","==",kelasFilter)
 )
 }
 
 const siswaSnap = await getDocs(siswaQuery)
 const totalSiswa = siswaSnap.size
 
-/* ================= ABSENSI QUERY ================= */
+/* ABSENSI QUERY */
 
 const start7 = startOfDay(subDays(selectedDate,6))
 const end7 = endOfDay(selectedDate)
 
 let absensiQuery
 
-if(selectedKelas==="all"){
+if(kelasFilter==="all"){
 absensiQuery = query(
 collection(db,"absensi"),
 where("tanggal",">=",Timestamp.fromDate(start7)),
 where("tanggal","<=",Timestamp.fromDate(end7))
 )
-}else{
+}
+else{
 absensiQuery = query(
 collection(db,"absensi"),
-where("kelas","==",selectedKelas),
+where("kelas","==",kelasFilter),
 where("tanggal",">=",Timestamp.fromDate(start7)),
 where("tanggal","<=",Timestamp.fromDate(end7))
 )
@@ -123,7 +127,7 @@ const snap = await getDocs(absensiQuery)
 const rawData:any[]=[]
 snap.forEach(doc=>rawData.push(doc.data()))
 
-/* ================= ANALYTICS ================= */
+/* ANALYTICS */
 
 const labels:string[]=[]
 const data:number[]=[]
@@ -144,6 +148,7 @@ let tgl:Date | null = null
 if(d.tanggal?.toDate){
 tgl = d.tanggal.toDate()
 }
+
 else if(typeof d.tanggal === "string"){
 tgl = new Date(d.tanggal)
 }
@@ -158,25 +163,14 @@ daily.forEach(d=>{
 
 const status = (d.status || "").toLowerCase()
 
-/* ================= HADIR ================= */
-
 if(status==="hadir" || status==="terlambat"){
-
 hadir++
-
 studentHadir[d.nama] = (studentHadir[d.nama] || 0) + 1
-
 }
-
-/* ================= ALPHA ================= */
 
 if(status==="alpha"){
-
 studentAlpha[d.nama] = (studentAlpha[d.nama] || 0) + 1
-
 }
-
-/* ================= DATANG PALING SIANG (HANYA HARI DIPILIH) ================= */
 
 let tgl:Date | null = null
 
@@ -192,7 +186,6 @@ isSameDay(tgl,selectedDate)
 ){
 
 const scanTime = d.waktu_scan.toDate()
-
 const h = scanTime.getHours()
 const m = scanTime.getMinutes()
 
@@ -217,7 +210,7 @@ data.push(hadir)
 
 }
 
-/* ================= SUMMARY ================= */
+/* SUMMARY */
 
 const average =
 data.length
@@ -229,20 +222,20 @@ data.length>1
 ? data[data.length-1]-data[0]
 :0
 
-const max = Math.max(...data)
-const min = Math.min(...data)
+const max = data.length ? Math.max(...data) : 0
+const min = data.length ? Math.min(...data) : 0
 
 const bestDay = max>0 ? labels[data.indexOf(max)] : "-"
 const worstDay = min>=0 ? labels[data.indexOf(min)] : "-"
 
-/* ================= TOP STUDENTS ================= */
+/* TOP STUDENTS */
 
 const topStudents = Object.entries(studentHadir)
 .map(([nama,hadir])=>({nama,hadir}))
 .sort((a,b)=>b.hadir-a.hadir)
 .slice(0,5)
 
-/* ================= RISK ================= */
+/* RISK */
 
 const riskStudents = Object.entries(studentAlpha)
 .map(([nama,alpha])=>({nama,alpha}))
@@ -250,7 +243,7 @@ const riskStudents = Object.entries(studentAlpha)
 
 const riskCount = riskStudents.length
 
-/* ================= INSIGHT ================= */
+/* INSIGHT */
 
 let insight=""
 
@@ -277,9 +270,10 @@ if(riskCount>0){
 insight += ` Terdapat ${riskCount} siswa dengan status alpha.`
 }
 
-/* ================= SET STATE ================= */
+/* SET STATE */
 
 setAnalytics({
+
 average7Days:Math.round(average),
 weeklyTrend,
 riskCount,
@@ -291,6 +285,7 @@ riskStudents,
 latestLate: latestLate
 ? {nama:latestLate.nama,jam:latestLate.jam}
 : undefined
+
 })
 
 setChartData({
