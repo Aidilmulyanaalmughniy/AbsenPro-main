@@ -129,10 +129,38 @@ const rawData:any[]=[]
 snap.forEach(doc=>{
 const data = doc.data()
 
-if(kelasFilter==="all" || data.kelas===kelasFilter){
+if(
+kelasFilter==="all" ||
+data.kelas?.trim()===kelasFilter
+){
 rawData.push(data)
 }
 })
+
+/* ================= JIKA DATA KOSONG ================= */
+
+if(rawData.length === 0){
+
+setAnalytics({
+average7Days:0,
+weeklyTrend:0,
+riskCount:0,
+bestDay:"-",
+worstDay:"-",
+insight:"Belum ada data absensi.",
+topStudents:[],
+riskStudents:[],
+latestLate:undefined
+})
+
+setChartData({
+labels:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+data:[0,0,0,0,0,0,0]
+})
+
+setLoading(false)
+return
+}
 
 /* ================= ANALYTICS ================= */
 
@@ -155,7 +183,6 @@ let tgl:Date | null = null
 if(d.tanggal?.toDate){
 tgl = d.tanggal.toDate()
 }
-
 else if(typeof d.tanggal === "string"){
 tgl = new Date(d.tanggal)
 }
@@ -167,10 +194,6 @@ return tgl && isSameDay(tgl,date)
 let hadir=0
 
 daily.forEach(d=>{
-
-if(kelasFilter !== "all" && d.kelas !== kelasFilter){
-return
-}
 
 const status = (d.status || "").toLowerCase()
 
@@ -209,10 +232,7 @@ const m = scanTime.getMinutes()
 
 const minutes = h*60+m
 
-if(
-(kelasFilter==="all" || d.kelas===kelasFilter) &&
-(!latestLate || minutes > latestLate.minutes)
-){
+if(!latestLate || minutes > latestLate.minutes){
 
 latestLate = {
 nama:d.nama,
@@ -243,8 +263,8 @@ data.length>1
 ? data[data.length-1]-data[0]
 :0
 
-const max = data.length ? Math.max(...data) : 0
-const min = data.length ? Math.min(...data) : 0
+const max = Math.max(...data)
+const min = Math.min(...data)
 
 const bestDay = max>0 ? labels[data.indexOf(max)] : "-"
 const worstDay = min>=0 ? labels[data.indexOf(min)] : "-"
@@ -275,15 +295,12 @@ const avgHadir = Math.round(average)
 if(avgHadir >= totalSiswa * 0.9){
 insight="Kehadiran sangat baik."
 }
-
 else if(avgHadir >= totalSiswa * 0.7){
 insight="Kehadiran cukup stabil."
 }
-
 else if(avgHadir >= totalSiswa * 0.5){
 insight="Kehadiran perlu ditingkatkan."
 }
-
 else{
 insight="Kehadiran rendah. Perlu evaluasi disiplin."
 }
