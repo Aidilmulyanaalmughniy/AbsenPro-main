@@ -68,7 +68,7 @@ kelas:raw.kelas,
 status:raw.status,
 tanggal:raw.tanggal?.toDate(),
 waktu_scan:raw.waktu_scan?.toDate(),
-terlambatMenit:raw.terlambatMenit ?? null,
+terlambatMenit:raw.terlambatMenit ?? 0,
 createdAt:raw.createdAt?.toDate()
 } as Absensi
 
@@ -87,6 +87,10 @@ return ()=>unsubscribe()
 
 },[selectedDate,selectedKelas])
 
+/* ============================= */
+/* ADD ABSENSI MANUAL */
+/* ============================= */
+
 const addAbsensi = useCallback(async(
 data:Omit<Absensi,'id'|'createdAt'|'status'>
 )=>{
@@ -101,41 +105,19 @@ try{
 const now=new Date()
 const today=startOfDay(now)
 
-const jamMasuk=new Date()
-jamMasuk.setHours(6,35,0,0)
-
-const batasAlpha=new Date()
-batasAlpha.setHours(15,10,0,0)
-
-if(now>batasAlpha){
-toast.error('Sudah lewat batas absensi (15:10)')
-return
-}
-
-let status:Absensi['status']='hadir'
-let terlambatMenit:number|null=null
-
-if(now>jamMasuk){
-
-const diff=now.getTime()-jamMasuk.getTime()
-
-terlambatMenit=Math.floor(diff/60000)
-
-status='terlambat'
-
-}
-
 const id=`${data.uid_rfid}_${format(today,'yyyyMMdd')}`
 
 await setDoc(doc(db,'absensi',id),{
 
 ...data,
 
-status,
-terlambatMenit,
+status:'hadir',
+terlambatMenit:0,
 
 waktu_scan:Timestamp.fromDate(now),
 tanggal:Timestamp.fromDate(today),
+
+manual:true,
 
 createdAt:serverTimestamp()
 
@@ -152,6 +134,10 @@ toast.error('Gagal menyimpan absensi')
 }
 
 },[userRole])
+
+/* ============================= */
+/* UPDATE STATUS */
+/* ============================= */
 
 const updateStatus = useCallback(async(
 id:string,
@@ -173,6 +159,10 @@ toast.error('Gagal update status')
 }
 
 },[])
+
+/* ============================= */
+/* DELETE ABSENSI */
+/* ============================= */
 
 const deleteAbsensi = useCallback(async(id:string)=>{
 
