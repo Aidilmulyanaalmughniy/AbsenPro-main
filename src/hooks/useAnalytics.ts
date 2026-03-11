@@ -75,7 +75,7 @@ const fetchAnalytics = async()=>{
 
 setLoading(true)
 
-/* RESET STATE AGAR DATA LAMA HILANG */
+/* reset data lama */
 
 setAnalytics({
 average7Days:0,
@@ -99,40 +99,36 @@ try{
 const kelasFilter =
 selectedKelas === "all"
 ? "all"
-: selectedKelas.trim()
+: selectedKelas.trim().toUpperCase()
 
 /* ================= QUERY ABSENSI ================= */
 
 const start7 = startOfDay(subDays(selectedDate,6))
 const end7 = endOfDay(selectedDate)
 
-let absensiQuery
-
-if(kelasFilter==="all"){
-
-absensiQuery = query(
+const absensiQuery = query(
 collection(db,"absensi"),
 where("createdAt",">=",Timestamp.fromDate(start7)),
 where("createdAt","<=",Timestamp.fromDate(end7))
 )
-
-}else{
-
-absensiQuery = query(
-collection(db,"absensi"),
-where("kelas","==",kelasFilter),
-where("createdAt",">=",Timestamp.fromDate(start7)),
-where("createdAt","<=",Timestamp.fromDate(end7))
-)
-
-}
 
 const snap = await getDocs(absensiQuery)
 
 const rawData:any[]=[]
 
 snap.forEach(doc=>{
-rawData.push(doc.data())
+
+const data = doc.data()
+
+const kelasData = (data.kelas || "").trim().toUpperCase()
+
+if(
+kelasFilter === "all" ||
+kelasData === kelasFilter
+){
+rawData.push(data)
+}
+
 })
 
 /* ================= DATA KOSONG ================= */
@@ -180,20 +176,20 @@ daily.forEach(d=>{
 
 const status = (d.status || "").toLowerCase()
 
-/* HADIR */
+/* hadir */
 
 if(status==="hadir" || status==="terlambat"){
 hadir++
 studentHadir[d.nama] = (studentHadir[d.nama] || 0) + 1
 }
 
-/* ALPHA */
+/* alpha */
 
 if(status==="alpha"){
 studentAlpha[d.nama] = (studentAlpha[d.nama] || 0) + 1
 }
 
-/* DATANG PALING SIANG */
+/* datang paling siang */
 
 if(status==="terlambat" && d.waktu_scan){
 
