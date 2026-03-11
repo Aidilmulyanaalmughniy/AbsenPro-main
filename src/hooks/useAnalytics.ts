@@ -82,7 +82,7 @@ selectedKelas === "all"
 ? "all"
 : selectedKelas.trim()
 
-/* TOTAL SISWA */
+/* ================= TOTAL SISWA ================= */
 
 let siswaQuery
 
@@ -99,7 +99,7 @@ where("kelas","==",kelasFilter)
 const siswaSnap = await getDocs(siswaQuery)
 const totalSiswa = siswaSnap.size
 
-/* ABSENSI QUERY */
+/* ================= ABSENSI QUERY ================= */
 
 const start7 = startOfDay(subDays(selectedDate,6))
 const end7 = endOfDay(selectedDate)
@@ -134,7 +134,7 @@ rawData.push(data)
 }
 })
 
-/* ANALYTICS */
+/* ================= ANALYTICS ================= */
 
 const labels:string[]=[]
 const data:number[]=[]
@@ -168,16 +168,26 @@ let hadir=0
 
 daily.forEach(d=>{
 
+if(kelasFilter !== "all" && d.kelas !== kelasFilter){
+return
+}
+
 const status = (d.status || "").toLowerCase()
+
+/* HADIR */
 
 if(status==="hadir" || status==="terlambat"){
 hadir++
 studentHadir[d.nama] = (studentHadir[d.nama] || 0) + 1
 }
 
+/* ALPHA */
+
 if(status==="alpha"){
 studentAlpha[d.nama] = (studentAlpha[d.nama] || 0) + 1
 }
+
+/* DATANG PALING SIANG */
 
 let tgl:Date | null = null
 
@@ -199,7 +209,10 @@ const m = scanTime.getMinutes()
 
 const minutes = h*60+m
 
-if(!latestLate || minutes > latestLate.minutes){
+if(
+(kelasFilter==="all" || d.kelas===kelasFilter) &&
+(!latestLate || minutes > latestLate.minutes)
+){
 
 latestLate = {
 nama:d.nama,
@@ -218,7 +231,7 @@ data.push(hadir)
 
 }
 
-/* SUMMARY */
+/* ================= SUMMARY ================= */
 
 const average =
 data.length
@@ -236,14 +249,14 @@ const min = data.length ? Math.min(...data) : 0
 const bestDay = max>0 ? labels[data.indexOf(max)] : "-"
 const worstDay = min>=0 ? labels[data.indexOf(min)] : "-"
 
-/* TOP STUDENTS */
+/* ================= TOP STUDENTS ================= */
 
 const topStudents = Object.entries(studentHadir)
 .map(([nama,hadir])=>({nama,hadir}))
 .sort((a,b)=>b.hadir-a.hadir)
 .slice(0,5)
 
-/* RISK */
+/* ================= RISK ================= */
 
 const riskStudents = Object.entries(studentAlpha)
 .map(([nama,alpha])=>({nama,alpha}))
@@ -251,7 +264,7 @@ const riskStudents = Object.entries(studentAlpha)
 
 const riskCount = riskStudents.length
 
-/* INSIGHT */
+/* ================= INSIGHT ================= */
 
 let insight=""
 
@@ -281,7 +294,7 @@ if(riskCount>0){
 insight += ` Terdapat ${riskCount} siswa dengan status alpha.`
 }
 
-/* SET STATE */
+/* ================= SET STATE ================= */
 
 setAnalytics({
 average7Days:Math.round(average),
